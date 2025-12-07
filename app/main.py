@@ -7,14 +7,16 @@ from app.database import Base, engine, get_db
 from app.models import category as category_model
 from app.models import product as product_model
 from app.models import order as order_model
+from app.models.review import Review
 from app.schemas import category as category_schema
 from app.schemas import product as product_schema
 from app.schemas import order as order_schema
+from app.schemas.review import ReviewCreate, ReviewOut
 
-# Create tables if they don't exist
+# -------------------- CREATE TABLES --------------------
 Base.metadata.create_all(bind=engine)
 
-# Initialize FastAPI
+# -------------------- FASTAPI INIT --------------------
 app = FastAPI(title="Car Dealership API")
 
 # -------------------- CORS --------------------
@@ -45,7 +47,6 @@ def create_category(cat: category_schema.CategoryCreate, db: Session = Depends(g
 @app.get("/products/", response_model=List[product_schema.ProductOut])
 def get_products(db: Session = Depends(get_db)):
     products = db.query(product_model.Product).all()
-    # Include category name in the output
     return [
         product_schema.ProductOut(
             id=p.id,
@@ -115,3 +116,41 @@ def create_order(ord: order_schema.OrderCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(new_order)
     return new_order
+
+# -------------------- REVIEW --------------------
+@app.post("/reviews/", response_model=ReviewOut)
+def create_review(review: ReviewCreate, db: Session = Depends(get_db)):
+    new_review = Review(
+        name=review.name,
+        rating=review.rating,
+        comment=review.comment
+    )
+    db.add(new_review)
+    db.commit()
+    db.refresh(new_review)
+    return new_review
+
+@app.get("/reviews/", response_model=List[ReviewOut])
+def get_reviews(db: Session = Depends(get_db)):
+    return db.query(Review).all()
+
+@app.put("/reviews/{review_id}/", response_model=ReviewOut)
+def update_review(review_id: int, updated_review: ReviewCreate, db: Session = Depends(get_db)):
+    review = db.query(Review).filter(Review.id == review_id).first()
+    if not review:
+        raise HTTPException(status_code=404, detail="Review not found")
+    review.name = updated_review.name
+    review.rating = updated_review.rating
+    review.comment = updated_review.comment
+    db.commit()
+    db.refresh(review)
+    return review
+
+@app.delete("/reviews/{review_id}/", response_model=dict)
+def delete_review(review_id: int, db: Session = Depends(get_db)):
+    review = db.query(Review).filter(Review.id == review_id).first()
+    if not review:
+        raise HTTPException(status_code=404, detail="Review not found")
+    db.delete(review)
+    db.commit()
+    return {"detail": "Review deleted successfully"}
